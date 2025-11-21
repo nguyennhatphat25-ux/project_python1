@@ -1,3 +1,5 @@
-Flask==3.0.0
-mysql-connector-python==8.3.0
-XlsxWriter==3.1.9
+flask
+pymysql
+requests
+xlsxwriter
+cryptography

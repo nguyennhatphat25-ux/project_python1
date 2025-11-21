@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # Container 1: Ứng dụng Web Flask
+  web:
+    build: .
+    ports:
+      - "5000:5000"  # Map port 5000 của container ra ngoài
+    environment:
+      - MYSQL_HOST=db
+    depends_on:
+      - db
+    restart: always
+
+  # Container 2: Database MySQL
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: expense_splitter
+    volumes:
+      - db_data:/var/lib/mysql
+      # Tự động chạy file database.sql khi khởi tạo lần đầu
+      - ./database.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+
+volumes:
+  db_data:
