@@ -19,7 +19,6 @@ app.secret_key = 'your-secret-key-here-change-in-production'
 MYSQL_CONFIG = {    
     'host': 'localhost',
     'user': 'root',
-    'password': '',  # Điền mật khẩu MySQL của bạn nếu có
     'password': '',  # <-- Điền mật khẩu MySQL của bạn
     'db': 'expense_splitter',
     'charset': 'utf8mb4',
