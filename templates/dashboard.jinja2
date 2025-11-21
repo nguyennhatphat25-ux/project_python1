@@ -2,14 +2,14 @@
 {% block title %}Dashboard - Expense Splitter{% endblock %}
 
 {% block content %}
-<div class="grid">
+<div class="grid" style="margin-bottom: 30px;">
     <div class="stat-card">
         <h3>{{ groups | length }}</h3>
-        <p>Nhóm</p>
+        <p>Nhóm tham gia</p>
     </div>
     <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
         <h3>{{ groups | default([]) | map(attribute='expense_count') | sum }}</h3>
-        <p>Chi tiêu</p>
+        <p>Tổng lượt chi tiêu</p>
     </div>
 </div>
 
@@ -18,9 +18,8 @@
     <button onclick="showCreateGroup()" class="btn btn-primary">➕ Tạo nhóm mới</button>
 </div>
 
-<!-- Modal tạo nhóm -->
 <div id="createGroupModal" class="modal" style="display:none;">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width: 500px;">
         <div class="modal-header">
             <span class="close" onclick="closeCreateGroup()">&times;</span>
             <h2>Tạo nhóm mới</h2>
@@ -28,24 +27,31 @@
         <form method="POST" action="{{ url_for('create_group') }}">
             <div class="form-group">
                 <label>Tên nhóm</label>
-                <input type="text" name="name" class="form-control" placeholder="Nhập tên nhóm" required>
+                <input type="text" name="name" class="form-control" placeholder="VD: Du lịch Đà Lạt, Ăn trưa..." required>
             </div>
-
             <div class="form-group">
                 <label>Tiền tệ</label>
                 <select name="currency" class="form-control">
-                    <option value="VND">VND</option>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
+                    <option value="VND">VND (đ)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
                 </select>
             </div>
-
             <div class="form-group">
-                <label>Thêm thành viên (phân tách bằng dấu ,)</label>
-                <input type="text" name="members" class="form-control" placeholder="Tên thành viên 1, Tên thành viên 2">
+                <label>Thành viên</label>
+                <div id="members-container">
+                    <div class="member-input-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <input type="text" name="members[]" class="form-control" placeholder="Tên thành viên 1">
+                        <button type="button" class="btn" style="background: #ff4757; color: white; padding: 0 10px;" onclick="removeMember(this)">✕</button>
+                    </div>
+                </div>
+                <button type="button" class="btn" style="background: #f0f0f0; color: #333; width: 100%; border: 1px dashed #ccc; margin-top: 5px;" onclick="addMemberRow()">
+                    ➕ Thêm thành viên khác
+                </button>
             </div>
-
-            <button type="submit" class="btn btn-success" style="width: 100%;">Tạo nhóm</button>
+            <div style="margin-top: 20px; text-align: right;">
+                <button type="submit" class="btn btn-success" style="width: 100%;">🚀 Tạo nhóm ngay</button>
+            </div>
         </form>
     </div>
 </div>
@@ -53,8 +59,13 @@
 {% if groups %}
 <div class="grid">
     {% for group in groups %}
-    <div class="card" onclick="window.location='{{ url_for('group_detail', group_id=group['id']) }}'" style="cursor: pointer;">
-        <h3 style="color: #667eea; margin-bottom: 10px;">{{ group['name'] }}</h3>
+    <div class="card" onclick="window.location='{{ url_for('group_detail', group_id=group['id']) }}'" style="cursor: pointer; 
+        {% if group['name'] == 'Chi tiêu cá nhân' %} border: 2px solid #667eea; {% endif %}">
+        
+        <h3 style="color: #667eea; margin-bottom: 10px;">
+            {{ group['name'] }} 
+            {% if group['name'] == 'Chi tiêu cá nhân' %} <span style="font-size:0.6em; background:#667eea; color:white; padding:2px 5px; border-radius:4px;">Cá nhân</span> {% endif %}
+        </h3>
         <p style="color: #666; margin-bottom: 10px;">
             👥 {{ group['member_count'] }} thành viên
         </p>
@@ -73,19 +84,24 @@
 </div>
 {% endif %} 
 
-<!-- JS Modal -->
 <script>
-function showCreateGroup() {
-    document.getElementById("createGroupModal").style.display = "block";
+function showCreateGroup() { document.getElementById("createGroupModal").style.display = "block"; }
+function closeCreateGroup() { document.getElementById("createGroupModal").style.display = "none"; }
+function addMemberRow() {
+    const container = document.getElementById('members-container');
+    const div = document.createElement('div');
+    div.className = 'member-input-row';
+    div.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px;';
+    div.innerHTML = `<input type="text" name="members[]" class="form-control" placeholder="Tên thành viên tiếp theo..." required><button type="button" class="btn" style="background: #ff4757; color: white; padding: 0 10px;" onclick="removeMember(this)">✕</button>`;
+    container.appendChild(div);
+    div.querySelector('input').focus();
 }
-function closeCreateGroup() {
-    document.getElementById("createGroupModal").style.display = "none";
+function removeMember(btn) {
+    const container = document.getElementById('members-container');
+    if (container.children.length > 0) btn.parentElement.remove();
 }
 window.onclick = function(event) {
-    var modal = document.getElementById("createGroupModal");
-    if (event.target == modal) {
-        modal.style.display = "none";
-    }
+    if (event.target == document.getElementById("createGroupModal")) document.getElementById("createGroupModal").style.display = "none";
 }
 </script>
 {% endblock %}
