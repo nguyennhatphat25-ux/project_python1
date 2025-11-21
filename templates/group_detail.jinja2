@@ -13,7 +13,6 @@
     </div>
 </div>
 
-<!-- Balances Section -->
 <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
     <h3 style="margin-bottom: 20px;">💰 Số dư thành viên</h3>
     <div class="grid">
@@ -31,7 +30,6 @@
     </div>
 </div>
 
-<!-- Settlements Section -->
 {% if settlements %}
 <div class="card">
     <h3 style="color: #11998e; margin-bottom: 20px;">✅ Đề xuất thanh toán</h3>
@@ -56,7 +54,6 @@
 </div>
 {% endif %}
 
-<!-- Expenses Section -->
 <div class="card">
     <h3 style="color: #667eea; margin-bottom: 20px;">📝 Lịch sử chi tiêu</h3>
     {% if expenses %}
@@ -102,7 +99,6 @@
     {% endif %}
 </div>
 
-<!-- ===== Add Expense Modal ===== -->
 <div id="addExpenseModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -155,7 +151,6 @@
     </div>
 </div>
 
-<!-- MoMo Modal -->
 <div id="momoModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -172,24 +167,75 @@
 function showAddExpense() {
     document.getElementById('addExpenseModal').style.display = 'block';
 }
+
 function closeAddExpense() {
     document.getElementById('addExpenseModal').style.display = 'none';
 }
+
 function closeMoMo() {
     document.getElementById('momoModal').style.display = 'none';
 }
+
+// Hiển thị Modal Xác nhận
 function createMoMoPayment(from, to, amount) {
     const momoContent = `
-        <div style="background:#d82d8b;color:white;padding:20px;border-radius:10px;margin-bottom:20px;">
-            <h3>Thông tin thanh toán</h3>
-            <p><strong>Từ:</strong> ${from}</p>
-            <p><strong>Đến:</strong> ${to}</p>
-            <p style="font-size:1.5em;"><strong>Số tiền:</strong> ${parseFloat(amount).toLocaleString()} {{ group.currency }}</p>
+        <div style="text-align: center;">
+            <h3 style="color: #d82d8b;">Xác nhận thanh toán</h3>
+            <p>Chuyển tiền đến: <strong>${to}</strong></p>
+            <h2 style="color: #d82d8b; margin: 20px 0;">${parseFloat(amount).toLocaleString()} VND</h2>
+            
+            <div id="momo-loading" style="display:none; color: #666; margin-bottom: 10px;">
+                ⏳ Đang tạo mã QR, vui lòng chờ...
+            </div>
+
+            <button onclick="processPayment('${from}', '${to}', ${amount})" 
+                    class="btn" style="background: #d82d8b; color: white; width: 100%; padding: 10px; font-size: 1.1em;">
+                🚀 Mở App MoMo để quét mã
+            </button>
         </div>
     `;
     document.getElementById('momoContent').innerHTML = momoContent;
     document.getElementById('momoModal').style.display = 'block';
 }
+
+// Gọi API Backend lấy link thanh toán
+async function processPayment(from, to, amount) {
+    const btn = document.querySelector('#momoContent button');
+    const loading = document.getElementById('momo-loading');
+    
+    btn.disabled = true;
+    btn.innerHTML = "Đang xử lý...";
+    loading.style.display = 'block';
+
+    try {
+        const response = await fetch('/momo/create-payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ from, to, amount })
+        });
+
+        const data = await response.json();
+
+        if (data.payUrl) {
+            // Redirect sang trang QR của MoMo
+            window.location.href = data.payUrl;
+        } else {
+            alert('Lỗi MoMo: ' + (data.message || 'Không lấy được link thanh toán'));
+            btn.disabled = false;
+            btn.innerHTML = "🚀 Thử lại";
+            loading.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Lỗi kết nối server');
+        btn.disabled = false;
+        btn.innerHTML = "🚀 Thử lại";
+        loading.style.display = 'none';
+    }
+}
+
 window.onclick = function(event) {
     if (event.target == document.getElementById('addExpenseModal')) closeAddExpense();
     if (event.target == document.getElementById('momoModal')) closeMoMo();
