@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập - Expense Splitter{% endblock %}
+
+{% block content %}
+<div style="max-width: 400px; margin: 50px auto;">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h2 style="color: #667eea;">Đăng nhập</h2>
+        <p style="color: #666;">Quản lý chi tiêu nhóm thông minh</p>
+    </div>
+    
+    <form method="POST" action="{{ url_for('login') }}">
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" class="form-control" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Mật khẩu</label>
+            <input type="password" id="password" name="password" class="form-control" required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Đăng nhập</button>
+        
+        <p style="text-align: center; margin-top: 20px;">
+            Chưa có tài khoản? <a href="{{ url_for('register') }}" style="color: #667eea; font-weight: bold;">Đăng ký ngay</a>
+        </p>
+    </form>
+</div>
+{% endblock %}

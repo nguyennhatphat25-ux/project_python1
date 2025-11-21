@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} - Expense Splitter{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+    <div>
+        <a href="{{ url_for('dashboard') }}" class="btn" style="background: #f0f0f0; color: #333;">← Quay lại</a>
+        <h2 style="display: inline-block; margin-left: 20px; color: #667eea;">{{ group.name }}</h2>
+    </div>
+    <div>
+        <a href="{{ url_for('export_excel', group_id=group.id) }}" class="btn btn-success">📥 Export Excel</a>
+        <button onclick="showAddExpense()" class="btn btn-primary">➕ Thêm chi tiêu</button>
+    </div>
+</div>
+
+<!-- Balances Section -->
+<div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+    <h3 style="margin-bottom: 20px;">💰 Số dư thành viên</h3>
+    <div class="grid">
+        {% for member in members %}
+        <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; text-align: center;">
+            <h4>{{ member.name }}</h4>
+            <p style="font-size: 1.5em; font-weight: bold; margin-top: 10px;">
+                {% set bal = balances.get(member.name, 0)|float %}
+                {% if bal >= 0 %}+{{ "{:,.0f}".format(bal) }}
+                {% else %}{{ "{:,.0f}".format(bal) }}{% endif %}
+                {{ group.currency or "" }}
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Settlements Section -->
+{% if settlements %}
+<div class="card">
+    <h3 style="color: #11998e; margin-bottom: 20px;">✅ Đề xuất thanh toán</h3>
+    {% for settlement in settlements %}
+    <div class="settlement">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div>
+                <strong>{{ settlement.from_user }}</strong> → 
+                <strong>{{ settlement.to_user }}</strong>
+            </div>
+            <div style="font-size: 1.2em; font-weight: bold; color: #11998e;">
+                {% set amt = settlement.amount|float %}
+                {{ "{:,.0f}".format(amt) }} {{ group.currency or "" }}
+            </div>
+        </div>
+        <button onclick="createMoMoPayment('{{ settlement.from_user }}', '{{ settlement.to_user }}', {{ settlement.amount|float }})"
+                class="btn" style="background: #d82d8b; color: white; width: 100%;">
+            💳 Thanh toán qua MoMo
+        </button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Expenses Section -->
+<div class="card">
+    <h3 style="color: #667eea; margin-bottom: 20px;">📝 Lịch sử chi tiêu</h3>
+    {% if expenses %}
+    <table>
+        <thead>
+            <tr>
+                <th>Ngày</th>
+                <th>Mô tả</th>
+                <th>Danh mục</th>
+                <th>Số tiền</th>
+                <th>Người trả</th>
+                <th>Chia cho</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for expense in expenses %}
+            <tr>
+                <td>{{ expense.date.strftime('%d/%m/%Y') if expense.date else "" }}</td>
+                <td>
+                    {% if expense.category == 'food' %}🍔
+                    {% elif expense.category == 'transport' %}🚗
+                    {% elif expense.category == 'entertainment' %}🎬
+                    {% elif expense.category == 'shopping' %}🛒
+                    {% elif expense.category == 'bills' %}💡
+                    {% else %}📦{% endif %}
+                    {{ expense.description }}
+                </td>
+                <td>{{ expense.category }}</td>
+                <td style="font-weight: bold; color: #11998e;">
+                    {% set amt = expense.amount|float %}
+                    {{ "{:,.0f}".format(amt) }} {{ group.currency or "" }}
+                </td>
+                <td>{{ expense.paid_by }}</td>
+                <td>{{ expense.split_members or "" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align: center; padding: 50px; color: #999;">
+        <p>Chưa có chi tiêu nào trong nhóm này</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ===== Add Expense Modal ===== -->
+<div id="addExpenseModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span class="close" onclick="closeAddExpense()">&times;</span>
+            <h2>Thêm chi tiêu</h2>
+        </div>
+        <form method="POST" action="{{ url_for('create_expense') }}">
+            <input type="hidden" name="group_id" value="{{ group.id }}">
+            <div class="form-group">
+                <label>Mô tả</label>
+                <input type="text" name="description" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Số tiền</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required>
+            </div>
+            <div class="form-group">
+                <label>Danh mục</label>
+                <select name="category" class="form-control">
+                    <option value="food">🍔 Ăn uống</option>
+                    <option value="transport">🚗 Di chuyển</option>
+                    <option value="entertainment">🎬 Giải trí</option>
+                    <option value="shopping">🛒 Mua sắm</option>
+                    <option value="bills">💡 Hóa đơn</option>
+                    <option value="other">📦 Khác</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Người trả tiền</label>
+                <select name="paid_by" class="form-control" required>
+                    {% for member in members %}
+                    <option value="{{ member.name }}">{{ member.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Chia cho</label>
+                {% for member in members %}
+                <div style="margin-bottom: 10px;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" name="split_with[]" value="{{ member.name }}" checked 
+                               style="margin-right: 10px; width: 20px; height: 20px;">
+                        <span>{{ member.name }}</span>
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;">Thêm chi tiêu</button>
+        </form>
+    </div>
+</div>
+
+<!-- MoMo Modal -->
+<div id="momoModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span class="close" onclick="closeMoMo()">&times;</span>
+            <h2>💳 Thanh toán MoMo</h2>
+        </div>
+        <div id="momoContent"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showAddExpense() {
+    document.getElementById('addExpenseModal').style.display = 'block';
+}
+function closeAddExpense() {
+    document.getElementById('addExpenseModal').style.display = 'none';
+}
+function closeMoMo() {
+    document.getElementById('momoModal').style.display = 'none';
+}
+function createMoMoPayment(from, to, amount) {
+    const momoContent = `
+        <div style="background:#d82d8b;color:white;padding:20px;border-radius:10px;margin-bottom:20px;">
+            <h3>Thông tin thanh toán</h3>
+            <p><strong>Từ:</strong> ${from}</p>
+            <p><strong>Đến:</strong> ${to}</p>
+            <p style="font-size:1.5em;"><strong>Số tiền:</strong> ${parseFloat(amount).toLocaleString()} {{ group.currency }}</p>
+        </div>
+    `;
+    document.getElementById('momoContent').innerHTML = momoContent;
+    document.getElementById('momoModal').style.display = 'block';
+}
+window.onclick = function(event) {
+    if (event.target == document.getElementById('addExpenseModal')) closeAddExpense();
+    if (event.target == document.getElementById('momoModal')) closeMoMo();
+}
+</script>
+{% endblock %}
