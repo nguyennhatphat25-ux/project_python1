@@ -2,6 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN pip install gunicorn
+
 # Cài đặt các gói system cần thiết cho MySQL
 RUN apt-get update && apt-get install -y \
     default-libmysqlclient-dev \

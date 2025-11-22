@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
+import os
 import pymysql
 import hashlib
 import hmac
@@ -17,9 +18,9 @@ app.secret_key = 'your-secret-key-here-change-in-production'
 # Cấu hình (Configuration)
 # ==============================
 MYSQL_CONFIG = {    
-    'host': 'localhost',
+    'host': os.environ.get('MYSQL_HOST', 'db'), 
     'user': 'root',
-    'password': '',  # <-- Điền mật khẩu MySQL của bạn
+    'password': '',  # Đặt mật khẩu cố định cho dễ config Docker
     'db': 'expense_splitter',
     'charset': 'utf8mb4',
     'cursorclass': pymysql.cursors.DictCursor
