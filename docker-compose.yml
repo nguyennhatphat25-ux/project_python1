@@ -5,7 +5,7 @@ services:
   web:
     build: .
     ports:
-      - "5000:5001"  # Map port 5000 của container ra ngoài
+      - "5000:5000"  # Map port 5000 của container ra ngoài
     environment:
       - MYSQL_HOST=db
     depends_on:
