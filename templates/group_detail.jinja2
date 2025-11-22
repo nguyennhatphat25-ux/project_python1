@@ -197,7 +197,8 @@ async function processPayment(from, to, amount) {
     try {
         const response = await fetch('/momo/create-payment', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ from, to, amount })
+            // FIX: Gửi thêm groupId lên server
+            body: JSON.stringify({ from, to, amount, groupId: {{ group.id }} })
         });
         const data = await response.json();
         if (data.payUrl) window.location.href = data.payUrl;
@@ -211,7 +212,90 @@ window.onclick = function(event) {
     if (event.target == document.getElementById('momoModal')) closeMoMo();
 }
 
-// === VẼ CHART CHO NHÓM NÀY ===
+document.addEventListener("DOMContentLoaded", function() {
+    fetch('/api/stats/{{ group.id }}')
+        .then(response => response.json())
+        .then(data => {
+            const chartContainer = document.getElementById('groupExpenseChart').parentElement;
+            if(data.length === 0) {
+                chartContainer.innerHTML = "<p style='color:#999; text-align:center; padding-top: 130px;'>Chưa có dữ liệu chi tiêu để vẽ biểu đồ</p>";
+                return;
+            }
+            const labels = data.map(item => {
+                const map = {'food': 'Ăn uống', 'transport': 'Di chuyển', 'entertainment': 'Giải trí', 'shopping': 'Mua sắm', 'bills': 'Hóa đơn', 'other': 'Khác'};
+                return map[item.category] || item.category;
+            });
+            const values = data.map(item => item.total);
+            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+
+            const ctx = document.getElementById('groupExpenseChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{ data: values, backgroundColor: colors }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right' },
+                        title: { display: true, text: 'Cơ cấu chi tiêu' }
+                    }
+                }
+            });
+        });
+});
+function showAddExpense() { document.getElementById('addExpenseModal').style.display = 'block'; }
+function closeAddExpense() { document.getElementById('addExpenseModal').style.display = 'none'; }
+function closeMoMo() { document.getElementById('momoModal').style.display = 'none'; }
+
+function showEditExpense(expense) {
+    document.getElementById('edit_desc').value = expense.description;
+    document.getElementById('edit_amount').value = expense.amount;
+    document.getElementById('edit_cat').value = expense.category;
+    document.getElementById('editForm').action = "/expense/update/" + expense.id;
+    document.getElementById('editExpenseModal').style.display = 'block';
+}
+
+function createMoMoPayment(from, to, amount) {
+    const momoContent = `
+        <div style="text-align: center;">
+            <h3 style="color: #d82d8b;">Xác nhận thanh toán</h3>
+            <p>Chuyển tiền đến: <strong>${to}</strong></p>
+            <h2 style="color: #d82d8b; margin: 20px 0;">${parseFloat(amount).toLocaleString()} VND</h2>
+            <div id="momo-loading" style="display:none; color: #666; margin-bottom: 10px;">⏳ Đang kết nối MoMo...</div>
+            <button onclick="processPayment('${from}', '${to}', ${amount})" class="btn" style="background: #d82d8b; color: white; width: 100%; padding: 10px; font-size: 1.1em;">🚀 Mở App MoMo</button>
+        </div>
+    `;
+    document.getElementById('momoContent').innerHTML = momoContent;
+    document.getElementById('momoModal').style.display = 'block';
+}
+
+async function processPayment(from, to, amount) {
+    const btn = document.querySelector('#momoContent button');
+    const loading = document.getElementById('momo-loading');
+    btn.disabled = true; btn.innerHTML = "Đang xử lý..."; loading.style.display = 'block';
+    try {
+        const response = await fetch('/momo/create-payment', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            // --- SỬA LẠI DÒNG NÀY ---
+            body: JSON.stringify({ from, to, amount, groupId: {{ group.id }} }) 
+            // ------------------------
+        });
+        const data = await response.json();
+        if (data.payUrl) window.location.href = data.payUrl;
+        else { alert('Lỗi MoMo: ' + (data.message)); btn.disabled = false; btn.innerHTML = "🚀 Thử lại"; loading.style.display = 'none'; }
+    } catch (error) { alert('Lỗi kết nối'); btn.disabled = false; btn.innerHTML = "🚀 Thử lại"; loading.style.display = 'none'; }
+}
+
+window.onclick = function(event) {
+    if (event.target == document.getElementById('addExpenseModal')) closeAddExpense();
+    if (event.target == document.getElementById('editExpenseModal')) document.getElementById('editExpenseModal').style.display = 'none';
+    if (event.target == document.getElementById('momoModal')) closeMoMo();
+}
+
+// (Giữ nguyên đoạn Chart phía dưới)
 document.addEventListener("DOMContentLoaded", function() {
     fetch('/api/stats/{{ group.id }}')
         .then(response => response.json())
