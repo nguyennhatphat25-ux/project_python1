@@ -24,7 +24,6 @@ UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Tự động tạo thư mục nếu chưa có
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
@@ -114,7 +113,6 @@ def register():
         cur.execute("INSERT INTO users (name, email, password) VALUES (%s, %s, %s)", (name, email, hashed))
         user_id = cur.lastrowid
         
-        # Tự động tạo nhóm cá nhân
         cur.execute("INSERT INTO `groups` (name, currency, created_by) VALUES (%s, %s, %s)", ("Chi tiêu cá nhân", "VND", user_id))
         group_id = cur.lastrowid
         cur.execute("INSERT INTO group_members (group_id, name) VALUES (%s, %s)", (group_id, name))
@@ -143,7 +141,7 @@ def login():
         if user:
             session['user_id'] = user['id']
             session['user_name'] = user['name']
-            # QUAN TRỌNG: Lưu avatar vào session để hiển thị ngay trên Menu
+            # FIX: Lấy đúng tên cột 'avatar' từ DB
             session['user_avatar'] = user.get('avatar') 
             return redirect(url_for('dashboard'))
         else:
@@ -156,7 +154,7 @@ def logout():
     return redirect(url_for('login'))
 
 # ==============================
-# 4. DASHBOARD & PROFILE (Phần bạn cần)
+# 4. DASHBOARD & PROFILE
 # ==============================
 @app.route('/dashboard')
 @login_required
@@ -173,7 +171,6 @@ def dashboard():
     conn.close()
     return render_template('dashboard.jinja2', groups=groups)
 
-# --- Route Xem Profile ---
 @app.route('/profile')
 @login_required
 def profile():
@@ -185,51 +182,42 @@ def profile():
     conn.close()
     return render_template('profile.html', user=user)
 
-# --- Route Cập nhật Profile & Avatar ---
 @app.route('/profile/update', methods=['POST'])
 @login_required
 def update_profile():
-    name = request.form.get('name')
-    phone = request.form.get('phone')
-    address = request.form.get('address')
+    name = request.form['name']
+    phone = request.form['phone']
+    address = request.form['address']
     avatar_filename = None
     
-    # Xử lý file ảnh
     if 'avatar' in request.files:
         file = request.files['avatar']
         if file and file.filename != '' and allowed_file(file.filename):
-            # Đổi tên file an toàn: user_ID_timestamp.jpg
-            filename = secure_filename(file.filename)
-            new_filename = f"user_{session['user_id']}_{int(datetime.now().timestamp())}.{filename.rsplit('.', 1)[1].lower()}"
-            
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], new_filename))
-            avatar_filename = new_filename
+            filename = secure_filename(f"user_{session['user_id']}_{file.filename}")
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            avatar_filename = filename
 
     conn = get_db()
     cur = conn.cursor()
     try:
         if avatar_filename:
-            # Cập nhật cả ảnh
-            cur.execute("""
-                UPDATE users SET name=%s, phone=%s, address=%s, avatar=%s WHERE id=%s
-            """, (name, phone, address, avatar_filename, session['user_id']))
-            session['user_avatar'] = avatar_filename # Cập nhật session ngay lập tức
+            # FIX: Dùng tên cột 'avatar'
+            cur.execute("UPDATE users SET name=%s, phone=%s, address=%s, avatar=%s WHERE id=%s", 
+                       (name, phone, address, avatar_filename, session['user_id']))
+            session['user_avatar'] = avatar_filename
         else:
-            # Chỉ cập nhật thông tin text
-            cur.execute("""
-                UPDATE users SET name=%s, phone=%s, address=%s WHERE id=%s
-            """, (name, phone, address, session['user_id']))
+            cur.execute("UPDATE users SET name=%s, phone=%s, address=%s WHERE id=%s", 
+                       (name, phone, address, session['user_id']))
         
         session['user_name'] = name
         conn.commit()
-        flash('Cập nhật hồ sơ thành công!', 'success')
+        flash('Cập nhật thành công!', 'success')
     except Exception as e:
         conn.rollback()
-        flash(f'Lỗi cập nhật: {str(e)}', 'error')
+        flash(f'Lỗi: {str(e)}', 'error')
     finally:
         cur.close()
         conn.close()
-        
     return redirect(url_for('profile'))
 
 # ==============================
@@ -290,6 +278,7 @@ def group_detail(group_id):
     if not group: return redirect(url_for('dashboard'))
     
     is_admin = (group['created_by'] == session['user_id'])
+    is_personal = (group['name'] == 'Chi tiêu cá nhân')
 
     cur.execute("SELECT * FROM group_members WHERE group_id = %s", (group_id,))
     members = cur.fetchall()
@@ -311,7 +300,7 @@ def group_detail(group_id):
     cur.close()
     conn.close()
     
-    return render_template("group_detail.jinja2", group=group, members=members, balances=balances, expenses=expenses, settlements=settlements, is_admin=is_admin)
+    return render_template("group_detail.jinja2", group=group, members=members, balances=balances, expenses=expenses, settlements=settlements, is_admin=is_admin, is_personal=is_personal)
 
 @app.route('/expense/create', methods=['POST'])
 @login_required
@@ -321,12 +310,17 @@ def create_expense():
     amount = float(request.form['amount'])
     category = request.form['category']
     paid_by = request.form['paid_by']
-    due_date = request.form.get('due_date') or None
+    
+    # FIX: Xử lý cột due_date (tránh lỗi Unknown column)
+    due_date = request.form.get('due_date')
+    if not due_date: due_date = None
+    
     split_with = request.form.getlist('split_with[]') 
     
     conn = get_db()
     cur = conn.cursor()
     try:
+        # FIX: Câu lệnh SQL phải khớp với các cột trong DB (đã thêm due_date)
         cur.execute("""
             INSERT INTO expenses (group_id, description, amount, category, paid_by, date, due_date)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -350,15 +344,12 @@ def update_expense(expense_id):
     description = request.form['description']
     amount = float(request.form['amount'])
     category = request.form['category']
-    
-    conn = get_db()
-    cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT e.group_id, g.created_by FROM expenses e JOIN `groups` g ON e.group_id=g.id WHERE e.id=%s", (expense_id,))
     row = cur.fetchone()
     if row and row['created_by'] != session['user_id']:
         flash("Chỉ Admin mới được sửa!", "error")
         return redirect(url_for('group_detail', group_id=group_id))
-
     try:
         cur.execute("UPDATE expenses SET description=%s, amount=%s, category=%s WHERE id=%s", (description, amount, category, expense_id))
         conn.commit()
@@ -370,104 +361,56 @@ def update_expense(expense_id):
 @app.route('/expense/delete/<int:expense_id>', methods=['POST'])
 @login_required
 def delete_expense(expense_id):
-    conn = get_db()
-    cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT e.group_id, g.created_by FROM expenses e JOIN `groups` g ON e.group_id=g.id WHERE e.id=%s", (expense_id,))
     row = cur.fetchone()
-    
     if row:
-        if row['created_by'] != session['user_id']:
-            flash("Chỉ Admin mới được xóa!", "error")
-        else:
-            cur.execute("DELETE FROM expenses WHERE id=%s", (expense_id,))
-            conn.commit()
-            flash("Đã xóa!", "success")
-    cur.close()
-    conn.close()
+        if row['created_by'] != session['user_id']: flash("Chỉ Admin mới được xóa!", "error")
+        else: cur.execute("DELETE FROM expenses WHERE id=%s", (expense_id,)); conn.commit(); flash("Đã xóa!", "success")
+    cur.close(); conn.close()
     return redirect(url_for('group_detail', group_id=row['group_id'] if row else None))
 
 @app.route('/group/delete/<int:group_id>', methods=['POST'])
 @login_required
 def delete_group(group_id):
-    conn = get_db()
-    cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("DELETE FROM `groups` WHERE id=%s AND created_by=%s", (group_id, session['user_id']))
-    if cur.rowcount > 0:
-        conn.commit()
-        flash("Đã xóa nhóm!", "success")
-    else:
-        flash("Không thể xóa (Bạn không phải Admin)", "error")
-    cur.close()
-    conn.close()
+    if cur.rowcount > 0: conn.commit(); flash("Đã xóa nhóm!", "success")
+    else: flash("Không thể xóa", "error")
+    cur.close(); conn.close()
     return redirect(url_for('dashboard'))
 
-# ==============================
-# 6. EXPORT EXCEL
-# ==============================
 @app.route('/export/<int:group_id>')
 @login_required
 def export_excel(group_id):
-    conn = get_db()
-    cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT * FROM `groups` WHERE id = %s", (group_id,))
     group = cur.fetchone()
     if not group: return redirect(url_for('dashboard'))
-    
     cur.execute("SELECT * FROM group_members WHERE group_id = %s", (group_id,))
     members = cur.fetchall()
-    cur.execute("""
-        SELECT e.*, GROUP_CONCAT(es.member_name SEPARATOR ', ') as split_members
-        FROM expenses e LEFT JOIN expense_splits es ON e.id = es.expense_id
-        WHERE e.group_id = %s GROUP BY e.id ORDER BY e.date DESC
-    """, (group_id,))
+    cur.execute("SELECT e.*, GROUP_CONCAT(es.member_name SEPARATOR ', ') as split_members FROM expenses e LEFT JOIN expense_splits es ON e.id = es.expense_id WHERE e.group_id = %s GROUP BY e.id ORDER BY e.date DESC", (group_id,))
     expenses = cur.fetchall()
-    
     balances = {m['name']: 0.0 for m in members}
     for exp in expenses:
-        amount = float(exp['amount'])
-        paid_by = exp['paid_by']
-        cur.execute("SELECT member_name FROM expense_splits WHERE expense_id = %s", (exp['id'],))
-        splits = cur.fetchall()
+        amount = float(exp['amount']); cur.execute("SELECT member_name FROM expense_splits WHERE expense_id = %s", (exp['id'],)); splits = cur.fetchall()
         if splits:
             per = amount / len(splits)
-            if paid_by in balances: balances[paid_by] += amount
+            if exp['paid_by'] in balances: balances[exp['paid_by']] += amount
             for s in splits:
                 if s['member_name'] in balances: balances[s['member_name']] -= per
-
-    cur.close()
-    conn.close()
-
-    output = io.BytesIO()
-    workbook = xlsxwriter.Workbook(output)
-    bold = workbook.add_format({'bold': True})
-    money_fmt = workbook.add_format({'num_format': '#,##0'})
-    date_fmt = workbook.add_format({'num_format': 'dd/mm/yyyy'})
-
-    sheet1 = workbook.add_worksheet("Chi tiêu")
-    headers1 = ["Ngày", "Mô tả", "Danh mục", "Số tiền", "Người trả", "Chia cho"]
+    cur.close(); conn.close()
+    output = io.BytesIO(); workbook = xlsxwriter.Workbook(output)
+    bold = workbook.add_format({'bold': True}); money_fmt = workbook.add_format({'num_format': '#,##0'}); date_fmt = workbook.add_format({'num_format': 'dd/mm/yyyy'})
+    sheet1 = workbook.add_worksheet("Chi tiêu"); headers1 = ["Ngày", "Mô tả", "Danh mục", "Số tiền", "Người trả", "Chia cho"]
     for col, h in enumerate(headers1): sheet1.write(0, col, h, bold)
-    
     for row, exp in enumerate(expenses, start=1):
-        sheet1.write(row, 0, exp['date'], date_fmt)
-        sheet1.write(row, 1, exp['description'])
-        sheet1.write(row, 2, exp['category'])
-        sheet1.write(row, 3, float(exp['amount']), money_fmt)
-        sheet1.write(row, 4, exp['paid_by'])
-        sheet1.write(row, 5, exp['split_members'])
-
-    sheet2 = workbook.add_worksheet("Tổng kết")
-    sheet2.write(0, 0, "Thành viên", bold)
-    sheet2.write(0, 1, "Số dư", bold)
-    sheet2.write(0, 2, "Trạng thái", bold)
-
+        sheet1.write(row, 0, exp['date'], date_fmt); sheet1.write(row, 1, exp['description']); sheet1.write(row, 2, exp['category'])
+        sheet1.write(row, 3, float(exp['amount']), money_fmt); sheet1.write(row, 4, exp['paid_by']); sheet1.write(row, 5, exp['split_members'])
+    sheet2 = workbook.add_worksheet("Tổng kết"); sheet2.write(0, 0, "Thành viên", bold); sheet2.write(0, 1, "Số dư", bold); sheet2.write(0, 2, "Trạng thái", bold)
     for row, (name, bal) in enumerate(balances.items(), start=1):
-        sheet2.write(row, 0, name)
-        sheet2.write(row, 1, bal, money_fmt)
-        status = "Nhận lại" if bal > 0 else "Phải trả" if bal < 0 else "-"
-        sheet2.write(row, 2, status)
-
-    workbook.close()
-    output.seek(0)
+        sheet2.write(row, 0, name); sheet2.write(row, 1, bal, money_fmt); sheet2.write(row, 2, "Nhận lại" if bal > 0 else "Phải trả" if bal < 0 else "-")
+    workbook.close(); output.seek(0)
     return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"Bao_cao_{group['name']}.xlsx")
 
 # ==============================
@@ -477,36 +420,20 @@ def export_excel(group_id):
 @login_required
 def create_momo_payment():
     try:
-        data = request.json
-        amount = str(int(data['amount']))
-        order_id = str(uuid.uuid4())
-        request_id = str(uuid.uuid4())
-        
-        group_id = str(data.get('groupId', ''))
-        extra_data = group_id
-
+        data = request.json; amount = str(int(data['amount'])); order_id = str(uuid.uuid4()); request_id = str(uuid.uuid4())
+        group_id = str(data.get('groupId', '')); extra_data = group_id
         raw_sig = f"accessKey={MOMO_CONFIG['accessKey']}&amount={amount}&extraData={extra_data}&ipnUrl={MOMO_CONFIG['ipnUrl']}&orderId={order_id}&orderInfo=Pay&partnerCode={MOMO_CONFIG['partnerCode']}&redirectUrl={MOMO_CONFIG['redirectUrl']}&requestId={request_id}&requestType=captureWallet"
-        signature = hmac.new(MOMO_CONFIG['secretKey'].encode(), raw_sig.encode(), hashlib.sha256).hexdigest()
-        
-        payload = {
-            'partnerCode': MOMO_CONFIG['partnerCode'], 'requestId': request_id, 'amount': amount, 'orderId': order_id, 
-            'orderInfo': 'Pay', 'redirectUrl': MOMO_CONFIG['redirectUrl'], 'ipnUrl': MOMO_CONFIG['ipnUrl'], 
-            'extraData': extra_data, 'requestType': 'captureWallet', 'signature': signature, 'lang': 'vi'
-        }
-        res = requests.post(MOMO_CONFIG['endpoint'], json=payload)
-        return jsonify(res.json())
+        sig = hmac.new(MOMO_CONFIG['secretKey'].encode(), raw_sig.encode(), hashlib.sha256).hexdigest()
+        payload = {'partnerCode': MOMO_CONFIG['partnerCode'], 'requestId': request_id, 'amount': amount, 'orderId': order_id, 'orderInfo': 'Pay', 'redirectUrl': MOMO_CONFIG['redirectUrl'], 'ipnUrl': MOMO_CONFIG['ipnUrl'], 'extraData': extra_data, 'requestType': 'captureWallet', 'signature': sig, 'lang': 'vi'}
+        res = requests.post(MOMO_CONFIG['endpoint'], json=payload); return jsonify(res.json())
     except Exception as e: return jsonify({'errorCode': -1, 'message': str(e)})
 
 @app.route('/momo-callback')
 def momo_callback():
-    resultCode = request.args.get("resultCode")
-    group_id_str = request.args.get("extraData")
-    
+    resultCode = request.args.get("resultCode"); group_id_str = request.args.get("extraData")
     if resultCode == "0": flash("Thanh toán thành công!", "success")
     else: flash("Thanh toán thất bại!", "error")
-    
-    if group_id_str and group_id_str.isdigit():
-        return redirect(url_for('group_detail', group_id=int(group_id_str)))
+    if group_id_str and group_id_str.isdigit(): return redirect(url_for('group_detail', group_id=int(group_id_str)))
     return redirect(url_for("dashboard"))
 
 @app.route('/momo-ipn', methods=['POST'])

@@ -1,40 +1,75 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - Expense Splitter{% endblock %}
+{% block title %}Dashboard{% endblock %}
+{% block header_title %}Tổng quan{% endblock %}
 
 {% block content %}
-<div class="grid" style="margin-bottom: 30px;">
-    <div class="stat-card">
-        <h3>{{ groups | length }}</h3>
-        <p>Nhóm tham gia</p>
+<div class="grid" style="margin-bottom: 40px;">
+    <div class="card" style="background: linear-gradient(45deg, #6c5ce7, #a29bfe); color: white;">
+        <p style="opacity: 0.8; font-size: 14px;">Tổng nhóm tham gia</p>
+        <h1 style="font-size: 36px; margin: 5px 0;">{{ groups | length }}</h1>
+        <i class="fas fa-users" style="float: right; margin-top: -30px; font-size: 24px; opacity: 0.5;"></i>
     </div>
-    <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
-        <h3>{{ groups | default([]) | map(attribute='expense_count') | sum }}</h3>
-        <p>Tổng lượt chi tiêu</p>
+    <div class="card" style="background: linear-gradient(45deg, #00b894, #55efc4); color: white;">
+        <p style="opacity: 0.8; font-size: 14px;">Tổng lượt chi tiêu</p>
+        <h1 style="font-size: 36px; margin: 5px 0;">{{ groups | default([]) | map(attribute='expense_count') | sum }}</h1>
+        <i class="fas fa-receipt" style="float: right; margin-top: -30px; font-size: 24px; opacity: 0.5;"></i>
     </div>
 </div>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2>Nhóm của bạn</h2>
-    <button onclick="showCreateGroup()" class="btn btn-primary">➕ Tạo nhóm mới</button>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+    <h3 style="font-weight: 600;">Danh sách nhóm</h3>
+    <button onclick="showCreateGroup()" class="btn btn-primary"><i class="fas fa-plus"></i> Tạo nhóm mới</button>
 </div>
 
-<div id="createGroupModal" class="modal" style="display:none;">
-    <div class="modal-content" style="max-width: 500px;">
-        <div class="modal-header">
-            <span class="close" onclick="closeCreateGroup()">&times;</span>
-            <h2>Tạo nhóm mới</h2>
+{% if groups %}
+<div class="grid">
+    {% for group in groups %}
+    <div class="card" onclick="window.location='{{ url_for('group_detail', group_id=group['id']) }}'" style="cursor: pointer; position: relative; overflow: hidden;">
+        {% if group['name'] == 'Chi tiêu cá nhân' %}
+            <div style="position: absolute; top: 0; right: 0; background: #6c5ce7; color: white; padding: 5px 15px; border-bottom-left-radius: 15px; font-size: 12px; font-weight: bold;">Cá nhân</div>
+        {% endif %}
+        
+        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+            <div style="width: 50px; height: 50px; background: #f0f2f5; border-radius: 15px; display: flex; align-items: center; justify-content: center; color: #6c5ce7; font-size: 20px;">
+                <i class="fas fa-layer-group"></i>
+            </div>
+            <div>
+                <h4 style="margin: 0; color: #2d3436;">{{ group['name'] }}</h4>
+                <p style="font-size: 12px; color: #b2bec3;">{{ group['member_count'] }} thành viên</p>
+            </div>
         </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <div>
+                <p style="font-size: 12px; color: #b2bec3; margin-bottom: 5px;">Tổng chi tiêu</p>
+                <h3 style="color: #00b894;">{{ "{:,.0f}".format(group['total_amount'] or 0) }} <small style="font-size: 14px;">{{ group['currency'] }}</small></h3>
+            </div>
+            <span style="width: 30px; height: 30px; background: #f0f2f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #b2bec3;"><i class="fas fa-arrow-right"></i></span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 50px;">
+    <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" width="100" style="opacity: 0.5; margin-bottom: 20px;">
+    <p style="color: #b2bec3;">Bạn chưa tham gia nhóm nào.</p>
+</div>
+{% endif %} 
+
+<div id="createGroupModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeCreateGroup()">&times;</span>
+        <h2 style="margin-bottom: 25px; color: var(--primary-color);">🚀 Tạo nhóm mới</h2>
         <form method="POST" action="{{ url_for('create_group') }}">
             <div class="form-group">
                 <label>Tên nhóm</label>
-                <input type="text" name="name" class="form-control" placeholder="VD: Du lịch Đà Lạt, Ăn trưa..." required>
+                <input type="text" name="name" class="form-control" placeholder="VD: Du lịch Đà Lạt..." required>
             </div>
             <div class="form-group">
                 <label>Tiền tệ</label>
                 <select name="currency" class="form-control">
                     <option value="VND">VND (đ)</option>
                     <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -42,47 +77,17 @@
                 <div id="members-container">
                     <div class="member-input-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
                         <input type="text" name="members[]" class="form-control" placeholder="Tên thành viên 1">
-                        <button type="button" class="btn" style="background: #ff4757; color: white; padding: 0 10px;" onclick="removeMember(this)">✕</button>
+                        <button type="button" class="btn btn-danger" style="padding: 0 15px;" onclick="removeMember(this)"><i class="fas fa-times"></i></button>
                     </div>
                 </div>
-                <button type="button" class="btn" style="background: #f0f0f0; color: #333; width: 100%; border: 1px dashed #ccc; margin-top: 5px;" onclick="addMemberRow()">
-                    ➕ Thêm thành viên khác
+                <button type="button" class="btn" style="background: #f0f2f5; color: #636e72; width: 100%; margin-top: 10px;" onclick="addMemberRow()">
+                    <i class="fas fa-plus"></i> Thêm thành viên khác
                 </button>
             </div>
-            <div style="margin-top: 20px; text-align: right;">
-                <button type="submit" class="btn btn-success" style="width: 100%;">🚀 Tạo nhóm ngay</button>
-            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Tạo ngay</button>
         </form>
     </div>
 </div>
-
-{% if groups %}
-<div class="grid">
-    {% for group in groups %}
-    <div class="card" onclick="window.location='{{ url_for('group_detail', group_id=group['id']) }}'" style="cursor: pointer; 
-        {% if group['name'] == 'Chi tiêu cá nhân' %} border: 2px solid #667eea; {% endif %}">
-        
-        <h3 style="color: #667eea; margin-bottom: 10px;">
-            {{ group['name'] }} 
-            {% if group['name'] == 'Chi tiêu cá nhân' %} <span style="font-size:0.6em; background:#667eea; color:white; padding:2px 5px; border-radius:4px;">Cá nhân</span> {% endif %}
-        </h3>
-        <p style="color: #666; margin-bottom: 10px;">
-            👥 {{ group['member_count'] }} thành viên
-        </p>
-        <p style="color: #666; margin-bottom: 10px;">
-            🧾 {{ group['expense_count'] }} chi tiêu
-        </p>
-        <p style="font-weight: bold; color: #11998e; font-size: 1.2em;">
-            {{ "{:,.0f}".format(group['total_amount'] or 0) }} {{ group['currency'] }}
-        </p>
-    </div>
-    {% endfor %}
-</div>
-{% else %}
-<div style="text-align: center; padding: 50px; color: #999;">
-    <p style="font-size: 1.2em;">Chưa có nhóm nào. Hãy tạo nhóm đầu tiên!</p>
-</div>
-{% endif %} 
 
 <script>
 function showCreateGroup() { document.getElementById("createGroupModal").style.display = "block"; }
@@ -92,7 +97,7 @@ function addMemberRow() {
     const div = document.createElement('div');
     div.className = 'member-input-row';
     div.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px;';
-    div.innerHTML = `<input type="text" name="members[]" class="form-control" placeholder="Tên thành viên tiếp theo..." required><button type="button" class="btn" style="background: #ff4757; color: white; padding: 0 10px;" onclick="removeMember(this)">✕</button>`;
+    div.innerHTML = `<input type="text" name="members[]" class="form-control" placeholder="Tên thành viên tiếp theo..."><button type="button" class="btn btn-danger" style="padding: 0 15px;" onclick="removeMember(this)"><i class="fas fa-times"></i></button>`;
     container.appendChild(div);
     div.querySelector('input').focus();
 }
@@ -101,7 +106,7 @@ function removeMember(btn) {
     if (container.children.length > 0) btn.parentElement.remove();
 }
 window.onclick = function(event) {
-    if (event.target == document.getElementById("createGroupModal")) document.getElementById("createGroupModal").style.display = "none";
+    if (event.target == document.getElementById("createGroupModal")) closeCreateGroup();
 }
 </script>
 {% endblock %}

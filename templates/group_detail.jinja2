@@ -1,132 +1,151 @@
 {% extends "base.html" %}
-{% block title %}{{ group.name }} - Expense Splitter{% endblock %}
+{% block title %}{{ group.name }}{% endblock %}
+{% block header_title %}Chi tiết nhóm{% endblock %}
 
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-    <div>
-        <a href="{{ url_for('dashboard') }}" class="btn" style="background: #f0f0f0; color: #333;">← Quay lại</a>
-        <h2 style="display: inline-block; margin-left: 20px; color: #667eea;">{{ group.name }}</h2>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <a href="{{ url_for('dashboard') }}" style="background: white; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #636e72; box-shadow: var(--card-shadow);"><i class="fas fa-arrow-left"></i></a>
+        <h2 style="margin: 0; color: #2d3436;">{{ group.name }}</h2>
+        {% if is_personal %}<span style="background: #dfe6e9; padding: 5px 10px; border-radius: 8px; font-size: 12px;">Cá nhân</span>{% endif %}
     </div>
     <div style="display: flex; gap: 10px;">
-        <form action="{{ url_for('delete_group', group_id=group.id) }}" method="POST" onsubmit="return confirm('Bạn có chắc chắn muốn xóa nhóm này không?');">
-            <button type="submit" class="btn" style="background: #ff4757; color: white;">🗑️ Xóa Nhóm</button>
+        {% if is_admin and not is_personal %}
+        <form action="{{ url_for('delete_group', group_id=group.id) }}" method="POST" onsubmit="return confirm('Bạn có chắc muốn xóa nhóm này?');">
+            <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i></button>
         </form>
-        <a href="{{ url_for('export_excel', group_id=group.id) }}" class="btn btn-success">📥 Export Excel</a>
-        <button onclick="showAddExpense()" class="btn btn-primary">➕ Thêm chi tiêu</button>
+        {% endif %}
+        <a href="{{ url_for('export_excel', group_id=group.id) }}" class="btn" style="background: #00b894; color: white;"><i class="fas fa-file-excel"></i> Xuất Excel</a>
+        <button onclick="showAddExpense()" class="btn btn-primary"><i class="fas fa-plus"></i> Thêm chi tiêu</button>
     </div>
 </div>
 
-<div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-bottom: 20px;">
-    <h3 style="margin-bottom: 20px;">💰 Số dư thành viên</h3>
-    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-        {% for member in members %}
-        <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; text-align: center;">
-            <h4 style="margin-bottom: 5px; font-size: 1.1em;">{{ member.name }}</h4>
-            <span style="font-size: 1.4em; font-weight: bold;">
-                {% set bal = balances.get(member.name, 0)|float %}
-                {% if bal >= 0 %}+{{ "{:,.0f}".format(bal) }}{% else %}{{ "{:,.0f}".format(bal) }}{% endif %}
-                {{ group.currency or "" }}
-            </span>
+<div class="grid" style="grid-template-columns: 2fr 1fr; gap: 30px;">
+    <div>
+        <div class="card">
+            <h3 style="margin-bottom: 20px; font-weight: 600;">Lịch sử chi tiêu</h3>
+            {% if expenses %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ngày</th>
+                        <th>Nội dung</th>
+                        <th>Số tiền</th>
+                        {% if not is_personal %}<th>Người trả</th>{% endif %}
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for expense in expenses %}
+                    <tr style="border-bottom: 1px solid #f0f0f0;">
+                        <td style="font-size: 13px; color: #b2bec3;">{{ expense.date.strftime('%d/%m') }}</td>
+                        <td>
+                            <div style="font-weight: 500;">{{ expense.description }}</div>
+                            <div style="font-size: 12px; color: #b2bec3;">{{ expense.category }}</div>
+                        </td>
+                        <td style="font-weight: 700; color: var(--primary-color);">
+                            {{ "{:,.0f}".format(expense.amount|float) }}
+                        </td>
+                        {% if not is_personal %}
+                        <td><span style="background: #f0f2f5; padding: 4px 10px; border-radius: 50px; font-size: 12px;">{{ expense.paid_by }}</span></td>
+                        {% endif %}
+                        <td style="text-align: right;">
+                            <button onclick='showEditExpense({{ expense|tojson }})' style="border: none; background: none; cursor: pointer; color: #636e72;"><i class="fas fa-pen"></i></button>
+                            <form action="{{ url_for('delete_expense', expense_id=expense.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Xóa?');">
+                                <button style="border: none; background: none; cursor: pointer; color: #ff7675; margin-left: 10px;"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="text-align: center; padding: 40px; color: #b2bec3;">Chưa có chi tiêu nào.</div>
+            {% endif %}
         </div>
-        {% endfor %}
     </div>
-</div>
 
-<div class="card" style="margin-bottom: 20px; text-align: center;">
-    <h3 style="color: #667eea; margin-bottom: 10px;">📊 Thống kê nhóm</h3>
-    <div style="max-width: 400px; margin: 0 auto; height: 300px; position: relative;">
-        <canvas id="groupExpenseChart"></canvas>
-    </div>
-</div>
-
-{% if settlements %}
-<div class="card" style="margin-bottom: 20px;">
-    <h3 style="color: #11998e; margin-bottom: 20px;">✅ Đề xuất thanh toán</h3>
-    {% for settlement in settlements %}
-    <div class="settlement">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <div><strong>{{ settlement.from_user }}</strong> → <strong>{{ settlement.to_user }}</strong></div>
-            <div style="font-size: 1.2em; font-weight: bold; color: #11998e;">
-                {% set amt = settlement.amount|float %}
-                {{ "{:,.0f}".format(amt) }} {{ group.currency or "" }}
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="card" style="text-align: center;">
+            <h4 style="margin-bottom: 15px;">Cơ cấu chi tiêu</h4>
+            <div style="height: 200px; position: relative;">
+                <canvas id="groupExpenseChart"></canvas>
             </div>
         </div>
-        <button onclick="createMoMoPayment('{{ settlement.from_user }}', '{{ settlement.to_user }}', {{ settlement.amount|float }})" class="btn" style="background: #d82d8b; color: white; width: 100%;">💳 Thanh toán qua MoMo</button>
-    </div>
-    {% endfor %}
-</div>
-{% endif %}
 
-<div class="card">
-    <h3 style="color: #667eea; margin-bottom: 20px;">📝 Lịch sử chi tiêu</h3>
-    {% if expenses %}
-    <div style="overflow-x: auto;">
-        <table>
-            <thead>
-                <tr>
-                    <th>Ngày</th><th>Mô tả</th><th>Danh mục</th><th>Số tiền</th><th>Người trả</th><th>Chia cho</th><th style="text-align: center;">Hành động</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for expense in expenses %}
-                <tr>
-                    <td>{{ expense.date.strftime('%d/%m/%Y') if expense.date else "" }}</td>
-                    <td>
-                        {% if expense.category == 'food' %}🍔{% elif expense.category == 'transport' %}🚗{% elif expense.category == 'entertainment' %}🎬{% elif expense.category == 'shopping' %}🛒{% elif expense.category == 'bills' %}💡{% else %}📦{% endif %}
-                        {{ expense.description }}
-                    </td>
-                    <td>{{ expense.category }}</td>
-                    <td style="font-weight: bold; color: #11998e;">{% set amt = expense.amount|float %}{{ "{:,.0f}".format(amt) }}</td>
-                    <td>{{ expense.paid_by }}</td>
-                    <td>{{ expense.split_members or "" }}</td>
-                    <td style="text-align: center; white-space: nowrap;">
-                        <button onclick='showEditExpense({{ expense|tojson }})' style="background: none; border: none; cursor: pointer; font-size: 1.2em; margin-right: 5px;" title="Sửa">✏️</button>
-                        <form action="{{ url_for('delete_expense', expense_id=expense.id) }}" method="POST" onsubmit="return confirm('Xóa khoản chi này?');" style="display:inline;">
-                            <button type="submit" style="background: none; border: none; cursor: pointer; font-size: 1.2em;" title="Xóa">❌</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        {% if not is_personal %}
+        <div class="card" style="background: var(--primary-color); color: white;">
+            <h4 style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;">Số dư thành viên</h4>
+            {% for member in members %}
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>{{ member.name }}</span>
+                {% set bal = balances.get(member.name, 0)|float %}
+                <span style="font-weight: bold; color: {% if bal >= 0 %}#55efc4{% else %}#ff7675{% endif %};">
+                    {% if bal >= 0 %}+{% endif %}{{ "{:,.0f}".format(bal) }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if settlements %}
+        <div class="card">
+            <h4 style="margin-bottom: 15px;">Gợi ý thanh toán</h4>
+            {% for settlement in settlements %}
+            <div style="background: #f9f9f9; padding: 10px; border-radius: 10px; margin-bottom: 10px; border-left: 4px solid #00b894;">
+                <div style="font-size: 13px; margin-bottom: 5px;">
+                    <strong>{{ settlement.from_user }}</strong> <i class="fas fa-arrow-right" style="font-size: 10px;"></i> <strong>{{ settlement.to_user }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #00b894; font-weight: bold;">{{ "{:,.0f}".format(settlement.amount|float) }}</span>
+                    <button onclick="createMoMoPayment('{{ settlement.from_user }}', '{{ settlement.to_user }}', {{ settlement.amount|float }})" style="background: #d63031; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;">MoMo</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endif %}
     </div>
-    {% else %}
-    <div style="text-align: center; padding: 50px; color: #999;"><p>Chưa có chi tiêu nào</p></div>
-    {% endif %}
 </div>
 
 <div id="addExpenseModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="closeAddExpense()">&times;</span>
-        <h2>Thêm chi tiêu</h2>
+        <h2 style="color: var(--primary-color); margin-bottom: 20px;">💸 Thêm chi tiêu mới</h2>
         <form method="POST" action="{{ url_for('create_expense') }}">
             <input type="hidden" name="group_id" value="{{ group.id }}">
-            <div class="form-group"><label>Mô tả</label><input type="text" name="description" class="form-control" required></div>
-            <div class="form-group"><label>Số tiền</label><input type="number" name="amount" class="form-control" step="0.01" required></div>
-            <div class="form-group">
-                <label>Danh mục</label>
-                <select name="category" class="form-control">
-                    <option value="food">🍔 Ăn uống</option><option value="transport">🚗 Di chuyển</option><option value="entertainment">🎬 Giải trí</option><option value="shopping">🛒 Mua sắm</option><option value="bills">💡 Hóa đơn</option><option value="other">📦 Khác</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Người trả tiền</label>
-                <select name="paid_by" class="form-control" required>
-                    {% for member in members %}<option value="{{ member.name }}">{{ member.name }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Chia cho</label>
-                {% for member in members %}
-                <div style="margin-bottom: 10px;">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" name="split_with[]" value="{{ member.name }}" checked style="margin-right: 10px; width: 20px; height: 20px;">
-                        <span>{{ member.name }}</span>
-                    </label>
+            <div class="form-group"><label>Chi cho việc gì?</label><input type="text" name="description" class="form-control" required placeholder="VD: Ăn tối, Tiền điện..."></div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group"><label>Số tiền</label><input type="number" name="amount" class="form-control" required></div>
+                <div class="form-group">
+                    <label>Danh mục</label>
+                    <select name="category" class="form-control">
+                        <option value="food">🍔 Ăn uống</option><option value="transport">🚗 Di chuyển</option><option value="entertainment">🎬 Giải trí</option><option value="shopping">🛒 Mua sắm</option><option value="bills">💡 Hóa đơn</option><option value="other">📦 Khác</option>
+                    </select>
                 </div>
-                {% endfor %}
             </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;">Thêm chi tiêu</button>
+
+            {% if is_personal %}
+                <input type="hidden" name="paid_by" value="{{ members[0].name }}">
+                {% for member in members %}<input type="hidden" name="split_with[]" value="{{ member.name }}">{% endfor %}
+            {% else %}
+                <div class="form-group">
+                    <label>Ai đã trả tiền?</label>
+                    <select name="paid_by" class="form-control" required>
+                        {% for member in members %}<option value="{{ member.name }}">{{ member.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Chia cho ai?</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        {% for member in members %}
+                        <label style="background: #f0f2f5; padding: 8px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" name="split_with[]" value="{{ member.name }}" checked> {{ member.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Lưu lại</button>
         </form>
     </div>
 </div>
@@ -138,32 +157,32 @@
         <form id="editForm" method="POST">
             <input type="hidden" name="group_id" value="{{ group.id }}">
             <div class="form-group"><label>Mô tả</label><input type="text" id="edit_desc" name="description" class="form-control" required></div>
-            <div class="form-group"><label>Số tiền</label><input type="number" id="edit_amount" name="amount" class="form-control" step="0.01" required></div>
+            <div class="form-group"><label>Số tiền</label><input type="number" id="edit_amount" name="amount" class="form-control" required></div>
             <div class="form-group">
                 <label>Danh mục</label>
                 <select id="edit_cat" name="category" class="form-control">
                     <option value="food">🍔 Ăn uống</option><option value="transport">🚗 Di chuyển</option><option value="entertainment">🎬 Giải trí</option><option value="shopping">🛒 Mua sắm</option><option value="bills">💡 Hóa đơn</option><option value="other">📦 Khác</option>
                 </select>
             </div>
-            <p style="color: red; font-size: 0.9em;">* Lưu ý: Để đảm bảo tính toán chính xác, vui lòng xóa đi tạo lại nếu muốn thay đổi người chia tiền.</p>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Cập nhật</button>
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Cập nhật</button>
         </form>
     </div>
 </div>
 
 <div id="momoModal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content" style="text-align: center;">
         <span class="close" onclick="closeMoMo()">&times;</span>
-        <h2>💳 Thanh toán MoMo</h2>
+        <h2 style="color: #d63031;">MoMo Payment</h2>
         <div id="momoContent"></div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
+// (Copy lại đoạn Script JS y hệt file cũ của bạn, không thay đổi logic)
 function showAddExpense() { document.getElementById('addExpenseModal').style.display = 'block'; }
 function closeAddExpense() { document.getElementById('addExpenseModal').style.display = 'none'; }
 function closeMoMo() { document.getElementById('momoModal').style.display = 'none'; }
@@ -178,12 +197,11 @@ function showEditExpense(expense) {
 
 function createMoMoPayment(from, to, amount) {
     const momoContent = `
-        <div style="text-align: center;">
-            <h3 style="color: #d82d8b;">Xác nhận thanh toán</h3>
+        <div style="margin-top: 20px;">
             <p>Chuyển tiền đến: <strong>${to}</strong></p>
-            <h2 style="color: #d82d8b; margin: 20px 0;">${parseFloat(amount).toLocaleString()} VND</h2>
-            <div id="momo-loading" style="display:none; color: #666; margin-bottom: 10px;">⏳ Đang kết nối MoMo...</div>
-            <button onclick="processPayment('${from}', '${to}', ${amount})" class="btn" style="background: #d82d8b; color: white; width: 100%; padding: 10px; font-size: 1.1em;">🚀 Mở App MoMo</button>
+            <h2 style="color: #d63031; margin: 10px 0;">${parseFloat(amount).toLocaleString()} VND</h2>
+            <div id="momo-loading" style="display:none; color: #666; margin-bottom: 10px;">⏳ Đang kết nối...</div>
+            <button onclick="processPayment('${from}', '${to}', ${amount})" class="btn" style="background: #d63031; color: white; width: 100%; justify-content: center;">🚀 Mở App MoMo</button>
         </div>
     `;
     document.getElementById('momoContent').innerHTML = momoContent;
@@ -197,13 +215,12 @@ async function processPayment(from, to, amount) {
     try {
         const response = await fetch('/momo/create-payment', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            // FIX: Gửi thêm groupId lên server
             body: JSON.stringify({ from, to, amount, groupId: {{ group.id }} })
         });
         const data = await response.json();
         if (data.payUrl) window.location.href = data.payUrl;
-        else { alert('Lỗi MoMo: ' + (data.message)); btn.disabled = false; btn.innerHTML = "🚀 Thử lại"; loading.style.display = 'none'; }
-    } catch (error) { alert('Lỗi kết nối'); btn.disabled = false; btn.innerHTML = "🚀 Thử lại"; loading.style.display = 'none'; }
+        else { alert('Lỗi: ' + data.message); btn.disabled = false; btn.innerHTML = "Thử lại"; loading.style.display = 'none'; }
+    } catch (error) { alert('Lỗi kết nối'); btn.disabled = false; btn.innerHTML = "Thử lại"; loading.style.display = 'none'; }
 }
 
 window.onclick = function(event) {
@@ -218,7 +235,7 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(data => {
             const chartContainer = document.getElementById('groupExpenseChart').parentElement;
             if(data.length === 0) {
-                chartContainer.innerHTML = "<p style='color:#999; text-align:center; padding-top: 130px;'>Chưa có dữ liệu chi tiêu để vẽ biểu đồ</p>";
+                chartContainer.innerHTML = "<p style='color:#b2bec3; text-align:center; padding-top: 80px;'>Chưa có dữ liệu</p>";
                 return;
             }
             const labels = data.map(item => {
@@ -226,106 +243,19 @@ document.addEventListener("DOMContentLoaded", function() {
                 return map[item.category] || item.category;
             });
             const values = data.map(item => item.total);
-            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+            const colors = ['#6c5ce7', '#a29bfe', '#00b894', '#55efc4', '#ff7675', '#fab1a0'];
 
             const ctx = document.getElementById('groupExpenseChart').getContext('2d');
             new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: labels,
-                    datasets: [{ data: values, backgroundColor: colors }]
+                    datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'right' },
-                        title: { display: true, text: 'Cơ cấu chi tiêu' }
-                    }
-                }
-            });
-        });
-});
-function showAddExpense() { document.getElementById('addExpenseModal').style.display = 'block'; }
-function closeAddExpense() { document.getElementById('addExpenseModal').style.display = 'none'; }
-function closeMoMo() { document.getElementById('momoModal').style.display = 'none'; }
-
-function showEditExpense(expense) {
-    document.getElementById('edit_desc').value = expense.description;
-    document.getElementById('edit_amount').value = expense.amount;
-    document.getElementById('edit_cat').value = expense.category;
-    document.getElementById('editForm').action = "/expense/update/" + expense.id;
-    document.getElementById('editExpenseModal').style.display = 'block';
-}
-
-function createMoMoPayment(from, to, amount) {
-    const momoContent = `
-        <div style="text-align: center;">
-            <h3 style="color: #d82d8b;">Xác nhận thanh toán</h3>
-            <p>Chuyển tiền đến: <strong>${to}</strong></p>
-            <h2 style="color: #d82d8b; margin: 20px 0;">${parseFloat(amount).toLocaleString()} VND</h2>
-            <div id="momo-loading" style="display:none; color: #666; margin-bottom: 10px;">⏳ Đang kết nối MoMo...</div>
-            <button onclick="processPayment('${from}', '${to}', ${amount})" class="btn" style="background: #d82d8b; color: white; width: 100%; padding: 10px; font-size: 1.1em;">🚀 Mở App MoMo</button>
-        </div>
-    `;
-    document.getElementById('momoContent').innerHTML = momoContent;
-    document.getElementById('momoModal').style.display = 'block';
-}
-
-async function processPayment(from, to, amount) {
-    const btn = document.querySelector('#momoContent button');
-    const loading = document.getElementById('momo-loading');
-    btn.disabled = true; btn.innerHTML = "Đang xử lý..."; loading.style.display = 'block';
-    try {
-        const response = await fetch('/momo/create-payment', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            // --- SỬA LẠI DÒNG NÀY ---
-            body: JSON.stringify({ from, to, amount, groupId: {{ group.id }} }) 
-            // ------------------------
-        });
-        const data = await response.json();
-        if (data.payUrl) window.location.href = data.payUrl;
-        else { alert('Lỗi MoMo: ' + (data.message)); btn.disabled = false; btn.innerHTML = "🚀 Thử lại"; loading.style.display = 'none'; }
-    } catch (error) { alert('Lỗi kết nối'); btn.disabled = false; btn.innerHTML = "🚀 Thử lại"; loading.style.display = 'none'; }
-}
-
-window.onclick = function(event) {
-    if (event.target == document.getElementById('addExpenseModal')) closeAddExpense();
-    if (event.target == document.getElementById('editExpenseModal')) document.getElementById('editExpenseModal').style.display = 'none';
-    if (event.target == document.getElementById('momoModal')) closeMoMo();
-}
-
-// (Giữ nguyên đoạn Chart phía dưới)
-document.addEventListener("DOMContentLoaded", function() {
-    fetch('/api/stats/{{ group.id }}')
-        .then(response => response.json())
-        .then(data => {
-            const chartContainer = document.getElementById('groupExpenseChart').parentElement;
-            if(data.length === 0) {
-                chartContainer.innerHTML = "<p style='color:#999; text-align:center; padding-top: 130px;'>Chưa có dữ liệu chi tiêu để vẽ biểu đồ</p>";
-                return;
-            }
-            const labels = data.map(item => {
-                const map = {'food': 'Ăn uống', 'transport': 'Di chuyển', 'entertainment': 'Giải trí', 'shopping': 'Mua sắm', 'bills': 'Hóa đơn', 'other': 'Khác'};
-                return map[item.category] || item.category;
-            });
-            const values = data.map(item => item.total);
-            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
-
-            const ctx = document.getElementById('groupExpenseChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{ data: values, backgroundColor: colors }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'right' },
-                        title: { display: true, text: 'Cơ cấu chi tiêu' }
-                    }
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 8 } } },
+                    cutout: '70%'
                 }
             });
         });
